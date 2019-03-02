@@ -1,0 +1,100 @@
+---
+title: "Hong Kong Horse Race"
+author: "Sahba Salarian"
+date: "Feb 2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+#library(float)
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE)
+#knitr::opts_chunk$set(fig.pos = 'H')
+knitr::opts_chunk$set(warning=FALSE)
+knitr::opts_chunk$set(message=FALSE)
+library(knitr)
+library(xtable)
+options(xtable.comment = FALSE)
+library(tidyverse)
+library(plyr)
+library(ggplot2)
+library(GGally)
+library(stargazer)
+library(corrplot)
+library(car)
+library(repr)
+library(MASS)
+library(leaps)
+library(caret)
+library(kernlab)
+library(e1071)
+library(pROC)
+library(ROCR)
+```
+## Dataset information
+
+The Hong Kong Horse racing dataset from http://fisher.stats.uwo.ca/faculty/aim/2019/9850/data/:
+
+```{r data, echo=FALSE}
+df <-read.csv ("/Users/sahba/Finance/Finance 2018/Data Science/HKHorse.csv", header=T, stringsAsFactors=F)
+```
+
+The data structure shows 925 rows with 2 variables.
+```{r}
+str(df)
+```
+## Data Engineering
+
+We check if any unknown value (NA) exists in the data set. Since there is no unknown values the structure of dataset remains unchanged. In case of exsiting NA values we can remove the observation or replace it by the coloumn mean in some cases.
+
+```{r Omit NA , echo = FALSE}
+df <- na.omit(df)
+#creating a data set without names:
+df <- df[,]
+```
+
+##Train \& Test
+The data is split between two randomly selected datasets of train and test. The splitting procedure is done randomly with specific seed value to make our model reproducable. Train set has 70\% of all the data.
+```{r test&train, echo = FALSE}
+set.seed(798102) 
+split <- sample (2, nrow (df), replace= TRUE, prob = c (0.7, 0.3))
+train <- df [split==1,]
+test <- df [split==2,]
+```
+##Logistic Model
+Considering the binary class of the WIN variable which is our target response, logistic regression is used to model the fit. Fit summary and coefficients can be found in Table 1. 
+```{r Logistic model, echo=FALSE}
+LFit <- glm(WIN ~. , data=train, family=binomial(link='logit'))
+
+#compute pseudo-R squared
+DMLE <- LFit$deviance
+DNULL <- LFit$null.deviance
+n <- nrow(train)
+Rsq <- (1-exp((DMLE-DNULL)/n)) / (1-exp(-DNULL/n))
+#mis-classification rate
+yH <- ifelse(predict(LFit, type="response") < 0.5, "0", "1") 
+eta <- mean(yH!=train$TARGET_5Yrs)
+#
+```
+
+```{r LFit summary-Chisq, echo=FALSE, results='asis' , header = FALSE}
+#Table 1
+print(xtable(summary(LFit), 
+      caption="summary of logistic regression fit with all inputs"), 
+      type="latex", caption.placement="top")
+```
+Based on this fit we can consider our hpothesis to be a line as:
+winning probability = Pr(WIN=1|PROB)
+logit(winning probability)= -3.1822 + 7.9517(PROB)
+
+
+
+##ROC curve
+```{r ROC for the fit, echo=FALSE, result= 'aes', fig.height=4 , fig.width=4, fig.align='center', fig.cap="ROC for simple Logistic Fit"}
+p_LFit<- predict(LFit,test,type="response")
+test_roc = roc(test$WIN~p_LFit, plot = TRUE, print.auc = TRUE)
+```
+
+
+
+ROC curve shows how well the fit developed over the train dataset can predict well, over the test data set. The area under the ROC curve, AUC value, which is a measure for the fit prediction capacity is 0.712.
